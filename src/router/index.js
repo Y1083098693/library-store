@@ -46,6 +46,7 @@ const routes = [
     path: '/books/:id',
     name: 'BookDetail',
     component: () => import('@/views/BookDetail.vue'),
+    props: true, // 将路由参数作为props传递
   },
 ]
 

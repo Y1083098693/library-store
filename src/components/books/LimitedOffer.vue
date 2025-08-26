@@ -24,7 +24,12 @@
       </div>
 
       <div class="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6">
-        <BookCard v-for="(book, index) in limitedOfferBooks" :key="index" :book="book" />
+        <BookCard
+          v-for="book in limitedOfferBooks"
+          :key="book.id"
+          :book="book"
+          @add-to-cart="$emit('add-to-cart', book)"
+        />
       </div>
     </div>
   </section>
@@ -38,10 +43,12 @@ export default {
   components: {
     BookCard,
   },
+  emits: ['add-to-cart'],
   data() {
     return {
       limitedOfferBooks: [
         {
+          id: 6,
           image: 'https://picsum.photos/id/42/300/450',
           title: '活着',
           author: '余华',
@@ -50,6 +57,7 @@ export default {
           discount: 30,
         },
         {
+          id: 7,
           image: 'https://picsum.photos/id/43/300/450',
           title: '三体',
           author: '刘慈欣',
@@ -58,6 +66,7 @@ export default {
           discount: 40,
         },
         {
+          id: 8,
           image: 'https://picsum.photos/id/44/300/450',
           title: '我们仨',
           author: '杨绛',
@@ -66,6 +75,7 @@ export default {
           discount: 25,
         },
         {
+          id: 9,
           image: 'https://picsum.photos/id/45/300/450',
           title: '百年孤独',
           author: '加西亚·马尔克斯',

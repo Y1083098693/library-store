@@ -74,6 +74,27 @@ export const bookService = {
       throw error
     }
   },
+  // 新增：获取书本详情
+  async getBookDetail(id) {
+    try {
+      const response = await api.get(`/books/${id}`)
+      return response.data || {}
+    } catch (error) {
+      console.error(`获取书本[${id}]详情错误:`, error)
+      throw error
+    }
+  },
+
+  // 新增：获取相关书本
+  async getRelatedBooks(id) {
+    try {
+      const response = await api.get(`/books/${id}/related`)
+      return Array.isArray(response.data) ? response.data : []
+    } catch (error) {
+      console.error(`获取书本[${id}]相关推荐错误:`, error)
+      return [] // 出错时返回空数组而不是抛出错误
+    }
+  },
 }
 
 // 兼容旧版导出方式
@@ -81,3 +102,5 @@ export const getCategories = bookService.getCategories
 export const getBooksByCategory = bookService.getBooksByCategory
 export const getCategoryBySlug = bookService.getCategoryBySlug
 export const searchBooks = bookService.searchBooks
+export const getBookDetail = bookService.getBookDetail
+export const getRelatedBooks = bookService.getRelatedBooks

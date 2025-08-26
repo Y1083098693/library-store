@@ -9,7 +9,12 @@
       </div>
 
       <div class="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6">
-        <BookCard v-for="(book, index) in newArrivals" :key="index" :book="book" />
+        <BookCard
+          v-for="book in newArrivals"
+          :key="book.id"
+          :book="book"
+          @add-to-cart="$emit('add-to-cart', book)"
+        />
       </div>
     </div>
   </section>
@@ -23,38 +28,47 @@ export default {
   components: {
     BookCard,
   },
+  emits: ['add-to-cart'],
   data() {
     return {
       newArrivals: [
         {
+          id: 10,
           image: 'https://picsum.photos/id/64/300/450',
           title: '长安的荔枝',
           author: '马伯庸',
           price: '45.00',
+          originalPrice: '39.50',
           badge: '新书',
           badgeClass: 'bg-green-500',
         },
         {
+          id: 11,
           image: 'https://picsum.photos/id/65/300/450',
           title: '蛤蟆先生去看心理医生',
           author: '罗伯特·戴博德',
           price: '49.80',
+          originalPrice: '59.80',
           badge: '新书',
           badgeClass: 'bg-green-500',
         },
         {
+          id: 12,
           image: 'https://picsum.photos/id/66/300/450',
           title: '置身事内：中国政府与经济发展',
           author: '兰小欢',
           price: '59.00',
+          originalPrice: '69.00',
           badge: '新书',
           badgeClass: 'bg-green-500',
         },
         {
+          id: 13,
           image: 'https://picsum.photos/id/67/300/450',
           title: '可能性的艺术',
           author: '刘瑜',
           price: '68.00',
+          originalPrice: '78.00',
           badge: '新书',
           badgeClass: 'bg-green-500',
         },
