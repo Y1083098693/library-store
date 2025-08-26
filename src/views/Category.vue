@@ -332,7 +332,19 @@ export default {
     const fetchCategoryBooks = async () => {
       loading.value = true
       error.value = null
+      try {
+        const response = await api.get(`/books/category/${categoryInfo.value.id}`)
 
+        // 关键修复：确保响应式更新
+        books.value = response.data?.data ? [...response.data.data] : []
+        totalItems.value = response.data?.pagination?.total || 0
+
+        // 调试信息
+        console.log('图书数据已更新:', books.value.length)
+        console.log('第一本书封面:', books.value[0]?.cover_image)
+      } catch (err) {
+        console.error('获取图书失败:', err)
+      }
       try {
         console.group('获取分类图书流程')
 
@@ -356,12 +368,27 @@ export default {
 
         // 3. 发送请求
         const response = await api.get(`/books/category/${categoryInfo.value.id}`, { params })
-        console.log('API原始响应:', response.data)
+        console.log('API原始响应:', response)
 
-        // 4. 修复点：正确处理响应数据
+        // 4. 修复点：正确处理响应数据结构
         const responseData = response.data || {}
-        books.value = Array.isArray(responseData.data) ? responseData.data : []
-        totalItems.value = responseData.pagination?.total || 0
+
+        // 情况1：响应直接是数组（旧版API格式）
+        if (Array.isArray(responseData)) {
+          books.value = responseData
+          totalItems.value = responseData.length
+        }
+        // 情况2：标准分页结构 { data: [], pagination: {} }（新版API格式）
+        else if (Array.isArray(responseData.data)) {
+          books.value = responseData.data
+          totalItems.value = responseData.pagination?.total || responseData.data.length
+        }
+        // 情况3：其他意外结构
+        else {
+          console.warn('意外的API响应结构:', responseData)
+          books.value = []
+          totalItems.value = 0
+        }
 
         console.log('处理后的图书数据:', {
           bookCount: books.value.length,
@@ -370,14 +397,14 @@ export default {
         })
 
         if (books.value.length === 0) {
-          console.warn('该分类下没有图书')
+          console.warn('警告：该分类下没有图书')
           error.value = '该分类下暂无图书'
         }
       } catch (err) {
         console.error('获取图书失败:', {
           error: err,
-          response: err.response?.data,
-          request: err.config,
+          response: err.response,
+          config: err.config,
         })
         error.value = err.response?.data?.message || '获取图书失败，请稍后重试'
         books.value = []
@@ -400,6 +427,7 @@ export default {
         reviews: book.review_count || 0,
         price: parseFloat(book.selling_price) || 0,
         originalPrice: parseFloat(book.original_price) || null,
+        cover_image: book.cover_image || book.image || '', // 兼容两种字段名
         badge: book.is_new ? '新书' : book.is_hot ? '热销' : null,
         badgeClass: book.is_new ? 'bg-green-500' : book.is_hot ? 'bg-primary' : '',
         isBestseller: (book.sales_volume || 0) > 100,

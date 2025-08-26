@@ -42,6 +42,11 @@ const routes = [
     component: () => import('@/views/Profile.vue'),
     meta: { requiresAuth: true }, // 需要登录才能访问
   },
+  {
+    path: '/books/:id',
+    name: 'BookDetail',
+    component: () => import('@/views/BookDetail.vue'),
+  },
 ]
 
 const router = createRouter({
