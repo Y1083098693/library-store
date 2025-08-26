@@ -25,7 +25,7 @@ const routes = [
     meta: { title: '购物车 - 小白书城' },
   },
   {
-    path: '/category/:categoryName',
+    path: '/category/:category', // 改为category
     name: 'Category',
     component: Category,
     meta: { title: '图书分类 - 小白书城' },

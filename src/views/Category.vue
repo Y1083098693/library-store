@@ -4,9 +4,9 @@
     <div class="bg-white border-b border-gray-200">
       <div class="container mx-auto px-4 py-6">
         <h1 class="text-[clamp(1.5rem,3vw,2.5rem)] font-bold text-gray-800">
-          {{ categoryName }}
+          {{ categoryInfo?.name || '加载中...' }}
         </h1>
-        <p class="text-gray-500 mt-1">探索 {{ categoryDescription }}</p>
+        <p class="text-gray-500 mt-1">{{ categoryInfo?.description || '探索精彩图书' }}</p>
       </div>
     </div>
 
@@ -175,9 +175,10 @@
           <div
             class="bg-white rounded-lg shadow-sm p-4 mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center"
           >
-            <p class="text-gray-600">
-              找到 <span class="text-primary font-medium">{{ filteredBooks.length }}</span> 本图书
+            <p v-if="!loading" class="text-gray-600">
+              找到 <span class="text-primary font-medium">{{ totalItems }}</span> 本图书
             </p>
+            <p v-else class="text-gray-600">正在加载图书...</p>
             <div class="mt-3 sm:mt-0 w-full sm:w-auto">
               <select
                 v-model="sortBy"
@@ -193,15 +194,21 @@
             </div>
           </div>
 
+          <!-- 加载状态 -->
+          <div v-if="loading" class="bg-white rounded-lg shadow-sm p-8 text-center">
+            <i class="fa fa-circle-o-notch fa-spin text-4xl text-primary mb-4"></i>
+            <p class="text-gray-600">正在努力加载...</p>
+          </div>
+
           <!-- 图书网格 -->
           <div
-            v-if="filteredBooks.length > 0"
+            v-else-if="books.length > 0"
             class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-3 gap-6"
           >
             <BookCard
-              v-for="book in paginatedBooks"
+              v-for="book in books"
               :key="book.id"
-              :book="book"
+              :book="mapBookForCard(book)"
               @add-to-cart="addToCart"
               @add-to-wishlist="addToWishlist"
             />
@@ -212,23 +219,23 @@
             <div class="w-20 h-20 mx-auto mb-4 text-gray-300">
               <i class="fa fa-search fa-5x"></i>
             </div>
-            <h3 class="text-lg font-medium text-gray-700 mb-2">未找到符合条件的图书</h3>
-            <p class="text-gray-500 mb-4">尝试调整筛选条件或浏览其他分类</p>
-            <button
-              @click="resetFilters"
-              class="px-4 py-2 bg-primary text-white rounded-md hover:bg-primary/90 transition-colors"
+            <h3 class="text-lg font-medium text-gray-700 mb-2">该分类下暂无图书</h3>
+            <p class="text-gray-500 mb-4">去看看其他分类吧</p>
+            <router-link
+              to="/"
+              class="px-4 py-2 bg-primary text-white rounded-md hover:bg-primary/90 transition-colors inline-block"
             >
-              清除筛选条件
-            </button>
+              返回首页
+            </router-link>
           </div>
 
           <!-- 分页 -->
-          <div v-if="filteredBooks.length > 0" class="mt-8 flex justify-center">
+          <div v-if="!loading && books.length > 0" class="mt-8 flex justify-center">
             <Pagination
               :current-page="currentPage"
               :total-pages="totalPages"
               :page-size="pageSize"
-              :total-items="filteredBooks.length"
+              :total-items="totalItems"
               @page-change="handlePageChange"
             />
           </div>
@@ -243,13 +250,13 @@
 
 <script>
 import { ref, computed, onMounted, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useCartStore } from '@/stores/cart'
 import { useWishlistStore } from '@/stores/wishlist'
-import Footer from '@/components/layout/footer.vue'
+import api from '@/services/api'
+import Footer from '@/components/layout/Footer.vue'
 import BookCard from '@/components/books/BookCard.vue'
 import Pagination from '@/components/layout/Pagination.vue'
-import { generateMockBooks, CATEGORY_INFO } from '@/mocks/CategoryMockData'
 
 export default {
   name: 'Category',
@@ -260,110 +267,158 @@ export default {
   },
   setup() {
     const route = useRoute()
+    const router = useRouter()
     const cartStore = useCartStore()
     const wishlistStore = useWishlistStore()
 
-    // 获取当前分类
-    const category = route.params.category || 'literature'
-    const categoryInfo = CATEGORY_INFO[category] || CATEGORY_INFO['literature']
+    const books = ref([])
+    const categoryInfo = ref(null)
+    const loading = ref(true)
+    const error = ref(null)
+    const totalItems = ref(0)
 
-    // 筛选条件
+    // 获取当前分类slug
+    const categorySlug = computed(() => route.params.category || 'literature')
+
+    // 筛选和排序状态
     const priceFilter = ref('all')
     const typeFilters = ref([])
     const publisherFilters = ref([])
     const sortBy = ref('recommended')
-
-    // 分页控制
     const currentPage = ref(1)
     const pageSize = ref(12)
 
-    // 模拟图书数据 - 使用导入的generateMockBooks函数
-    const books = ref([])
+    // 计算总页数
+    const totalPages = computed(() => Math.ceil(totalItems.value / pageSize.value))
 
-    // 初始化数据
-    onMounted(() => {
-      // 调用从mock文件导入的函数生成数据，并传入当前分类
-      books.value = generateMockBooks(category)
-    })
+    // 获取分类信息
+    const fetchCategoryInfo = async () => {
+      try {
+        console.log('正在获取分类信息，slug:', categorySlug.value)
 
-    // 筛选图书
-    const filteredBooks = computed(() => {
-      return books.value
-        .filter((book) => {
-          // 价格筛选
-          if (priceFilter.value !== 'all') {
-            if (priceFilter.value === '0-50' && (book.price < 0 || book.price > 50)) return false
-            if (priceFilter.value === '50-100' && (book.price < 50 || book.price > 100))
-              return false
-            if (priceFilter.value === '100+' && book.price < 100) return false
-          }
+        const response = await api.get(`/categories/slug/${categorySlug.value}`)
+        console.log('分类API响应:', response.data)
 
-          // 类型筛选
-          if (
-            typeFilters.value.length > 0 &&
-            !typeFilters.value.includes(
-              book.type === '平装'
-                ? 'paperback'
-                : book.type === '精装'
-                  ? 'hardcover'
-                  : book.type === '电子书'
-                    ? 'ebook'
-                    : 'audio',
-            )
-          ) {
-            return false
-          }
+        // 增强响应数据检查
+        if (!response.data || !response.data.id) {
+          console.warn('分类数据不完整:', response.data)
+          throw new Error('分类不存在或数据不完整')
+        }
 
-          // 出版社筛选
-          if (
-            publisherFilters.value.length > 0 &&
-            !publisherFilters.value.includes(book.publisher)
-          ) {
-            return false
-          }
+        // 确保分类信息正确存储
+        categoryInfo.value = {
+          id: Number(response.data.id),
+          name: response.data.name || '',
+          slug: response.data.slug || '',
+          description: response.data.description || '',
+        }
 
-          return true
+        console.log('处理后的分类信息:', categoryInfo.value)
+        return true
+      } catch (err) {
+        console.error('获取分类信息失败:', {
+          error: err,
+          requestUrl: `/categories/slug/${categorySlug.value}`,
+          stack: err.stack,
         })
-        .sort((a, b) => {
-          // 排序逻辑
-          switch (sortBy.value) {
-            case 'price-asc':
-              return a.price - b.price
-            case 'price-desc':
-              return b.price - a.price
-            case 'newest':
-              return a.isNew ? -1 : 1
-            case 'bestseller':
-              return a.isBestseller ? -1 : 1
-            default: // recommended
-              // 综合排序：畅销优先，然后是评分，然后是价格
-              if (a.isBestseller && !b.isBestseller) return -1
-              if (!a.isBestseller && b.isBestseller) return 1
-              return b.rating - a.rating || a.price - b.price
-          }
+
+        error.value = `获取分类失败: ${err.message}`
+        router.push('/')
+        return false
+      }
+    }
+
+    // 获取分类图书
+    const fetchCategoryBooks = async () => {
+      loading.value = true
+      error.value = null
+
+      try {
+        console.group('获取分类图书流程')
+
+        // 1. 获取分类信息
+        if (!(await fetchCategoryInfo())) {
+          console.warn('终止获取图书：分类信息获取失败')
+          return
+        }
+
+        // 2. 准备请求参数
+        const params = {
+          page: currentPage.value,
+          limit: pageSize.value,
+          sort: sortBy.value,
+        }
+
+        console.log('请求参数:', {
+          categoryId: categoryInfo.value.id,
+          ...params,
         })
-    })
 
-    // 分页处理
-    const paginatedBooks = computed(() => {
-      const startIndex = (currentPage.value - 1) * pageSize.value
-      return filteredBooks.value.slice(startIndex, startIndex + pageSize.value)
-    })
+        // 3. 发送请求
+        const response = await api.get(`/books/category/${categoryInfo.value.id}`, { params })
+        console.log('API原始响应:', response.data)
 
-    const totalPages = computed(() => {
-      return Math.ceil(filteredBooks.value.length / pageSize.value)
-    })
+        // 4. 修复点：正确处理响应数据
+        const responseData = response.data || {}
+        books.value = Array.isArray(responseData.data) ? responseData.data : []
+        totalItems.value = responseData.pagination?.total || 0
+
+        console.log('处理后的图书数据:', {
+          bookCount: books.value.length,
+          firstBook: books.value[0] || null,
+          totalItems: totalItems.value,
+        })
+
+        if (books.value.length === 0) {
+          console.warn('该分类下没有图书')
+          error.value = '该分类下暂无图书'
+        }
+      } catch (err) {
+        console.error('获取图书失败:', {
+          error: err,
+          response: err.response?.data,
+          request: err.config,
+        })
+        error.value = err.response?.data?.message || '获取图书失败，请稍后重试'
+        books.value = []
+      } finally {
+        loading.value = false
+        console.groupEnd()
+      }
+    }
+
+    // 将后端返回的Book对象映射为BookCard需要的格式
+    const mapBookForCard = (book) => {
+      if (!book) return null
+
+      return {
+        id: book.id,
+        image: book.cover_image || '/static/default-book-cover.jpg',
+        title: book.title || '未知书名',
+        author: book.author || '未知作者',
+        rating: parseFloat(book.rating) || 0,
+        reviews: book.review_count || 0,
+        price: parseFloat(book.selling_price) || 0,
+        originalPrice: parseFloat(book.original_price) || null,
+        badge: book.is_new ? '新书' : book.is_hot ? '热销' : null,
+        badgeClass: book.is_new ? 'bg-green-500' : book.is_hot ? 'bg-primary' : '',
+        isBestseller: (book.sales_volume || 0) > 100,
+        isNew: Boolean(book.is_new),
+        discount: book.discount ? Math.round(book.discount) : null,
+      }
+    }
 
     // 处理排序变化
     const handleSortChange = () => {
-      currentPage.value = 1 // 排序变化时重置到第一页
+      currentPage.value = 1
+      fetchCategoryBooks()
     }
 
     // 处理分页变化
     const handlePageChange = (page) => {
       currentPage.value = page
-      // 滚动到页面顶部
       window.scrollTo({ top: 0, behavior: 'smooth' })
+      fetchCategoryBooks()
     }
 
     // 重置筛选条件
@@ -373,54 +428,73 @@ export default {
       publisherFilters.value = []
       sortBy.value = 'recommended'
       currentPage.value = 1
+      fetchCategoryBooks()
     }
 
     // 添加到购物车
-    const addToCart = (book) => {
-      cartStore.addItem({
-        id: book.id,
-        title: book.title,
-        author: book.author,
-        coverImage: book.coverImage,
-        price: book.price,
-        quantity: 1,
-      })
+    const addToCart = (bookCard) => {
+      const originalBook = books.value.find((b) => b.id === bookCard.id)
+      if (originalBook) {
+        cartStore.addItem({
+          id: originalBook.id,
+          title: originalBook.title,
+          author: originalBook.author,
+          coverImage: originalBook.cover_image,
+          price: parseFloat(originalBook.selling_price),
+          quantity: 1,
+        })
+      }
     }
 
     // 添加到收藏
-    const addToWishlist = (book) => {
-      wishlistStore.addItem(book)
+    const addToWishlist = (bookCard) => {
+      const originalBook = books.value.find((b) => b.id === bookCard.id)
+      if (originalBook) {
+        wishlistStore.addItem(originalBook)
+      }
     }
 
-    // 监听路由变化，重新生成数据
+    // 初始加载
+    onMounted(() => {
+      fetchCategoryBooks()
+    })
+
+    // 监听路由变化
     watch(
       () => route.params.category,
-      (newCategory) => {
-        if (newCategory) {
-          // 路由变化时使用导入的函数重新生成对应分类的数据
-          books.value = generateMockBooks(newCategory)
-          resetFilters()
+      (newSlug) => {
+        if (newSlug) {
+          currentPage.value = 1
+          categoryInfo.value = null
+          fetchCategoryBooks()
         }
       },
+      { immediate: true },
     )
 
+    // 监听排序和筛选变化
+    watch([priceFilter, typeFilters, publisherFilters], () => {
+      currentPage.value = 1
+    })
+
     return {
-      categoryName: categoryInfo.name,
-      categoryDescription: categoryInfo.description,
+      categoryInfo,
+      loading,
+      books,
+      totalItems,
       priceFilter,
       typeFilters,
       publisherFilters,
       sortBy,
       currentPage,
       pageSize,
-      filteredBooks,
-      paginatedBooks,
       totalPages,
       handleSortChange,
       handlePageChange,
       resetFilters,
       addToCart,
       addToWishlist,
+      mapBookForCard,
     }
   },
 }

@@ -120,7 +120,10 @@
       </div>
 
       <!-- 主导航菜单 -->
-      <nav class="hidden md:flex items-center space-x-1 py-3 border-t border-gray-100">
+      <nav
+        v-if="!loadingCategories"
+        class="hidden md:flex items-center space-x-1 py-3 border-t border-gray-100"
+      >
         <router-link
           to="/"
           class="px-3 py-2 text-gray-700 hover:text-primary transition-colors rounded-md"
@@ -128,55 +131,23 @@
         >
           首页
         </router-link>
+        <!-- 动态生成分类链接 -->
         <router-link
-          to="/category/literature"
+          v-for="category in categories"
+          :key="category.id"
+          :to="`/category/${category.slug}`"
           class="px-3 py-2 text-gray-700 hover:text-primary transition-colors rounded-md"
           :class="{
-            'text-primary font-medium bg-primary/10': $route.path === '/category/literature',
+            'text-primary font-medium bg-primary/10': $route.params.category === category.slug,
           }"
-          >文学小说</router-link
         >
-        <router-link
-          to="/category/social-science"
-          class="px-3 py-2 text-gray-700 hover:text-primary transition-colors rounded-md"
-          :class="{
-            'text-primary font-medium bg-primary/10': $route.path === '/category/social-science',
-          }"
-          >社科经管</router-link
-        >
-        <router-link
-          to="/category/technology"
-          class="px-3 py-2 text-gray-700 hover:text-primary transition-colors rounded-md"
-          :class="{
-            'text-primary font-medium bg-primary/10': $route.path === '/category/technology',
-          }"
-          >科技科普</router-link
-        >
-        <router-link
-          to="/category/lifestyle"
-          class="px-3 py-2 text-gray-700 hover:text-primary transition-colors rounded-md"
-          :class="{
-            'text-primary font-medium bg-primary/10': $route.path === '/category/lifestyle',
-          }"
-          >生活艺术</router-link
-        >
-        <router-link
-          to="/category/education"
-          class="px-3 py-2 text-gray-700 hover:text-primary transition-colors rounded-md"
-          :class="{
-            'text-primary font-medium bg-primary/10': $route.path === '/category/education',
-          }"
-          >教育学习</router-link
-        >
-        <router-link
-          to="/category/children"
-          class="px-3 py-2 text-gray-700 hover:text-primary transition-colors rounded-md"
-          :class="{
-            'text-primary font-medium bg-primary/10': $route.path === '/category/children',
-          }"
-          >少儿读物</router-link
-        >
+          {{ category.name }}
+        </router-link>
       </nav>
+      <!-- 加载状态 -->
+      <div v-else class="hidden md:flex items-center space-x-1 py-3 border-t border-gray-100">
+        <div class="px-3 py-2 text-gray-400">加载分类...</div>
+      </div>
     </div>
   </header>
 </template>
@@ -188,6 +159,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useCartStore } from '@/stores/cart'
 import { getAvatarUrl } from '@/config'
 import TopNotice from './TopNotice.vue'
+import { getCategories } from '@/services/bookService' // 导入获取分类的方法
 
 export default {
   name: 'Header',
@@ -197,14 +169,26 @@ export default {
   setup() {
     const router = useRouter()
     const authStore = useAuthStore()
-    const cartStore = useCartStore() // 引入购物车状态管理
+    const cartStore = useCartStore()
 
-    // 搜索关键词
+    const categories = ref([])
+    const loadingCategories = ref(false)
     const searchKeyword = ref('')
-
-    // 头像加载状态
     const isLoadingAvatar = ref(false)
     const avatarError = ref(false)
+
+    // 获取分类数据的方法
+    const fetchCategories = async () => {
+      loadingCategories.value = true
+      try {
+        categories.value = await getCategories()
+      } catch (error) {
+        console.error('Failed to fetch categories for navigation:', error)
+        // 可以在这里设置一个默认的categories值，或者保持为空数组
+      } finally {
+        loadingCategories.value = false
+      }
+    }
 
     // 从购物车状态获取商品数量
     const cartItemCount = computed(() => {
@@ -301,8 +285,12 @@ export default {
       { deep: true, immediate: true },
     )
 
-    // 初始化时检查登录状态
+    // 初始化时检查登录状态并获取分类
     onMounted(() => {
+      // 获取导航分类
+      fetchCategories()
+
+      // 检查用户登录状态
       if (authStore.isAuthenticated && (!authStore.user || !authStore.user.avatar_url)) {
         authStore.fetchUserProfile().catch((error) => {
           console.error('获取用户信息失败:', error)
@@ -318,6 +306,8 @@ export default {
       userDisplayName,
       isLoadingAvatar,
       cartItemCount,
+      categories,
+      loadingCategories,
       handleAvatarLoad,
       handleAvatarError,
       handleSearch,
